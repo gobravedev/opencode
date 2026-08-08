@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
-	"github.com/opencode-ai/opencode/internal/app"
+	appcore "github.com/opencode-ai/opencode/internal/app"
 	"github.com/opencode-ai/opencode/internal/config"
 	"github.com/opencode-ai/opencode/internal/db"
 	"github.com/opencode-ai/opencode/internal/format"
@@ -97,10 +97,26 @@ to assist developers in writing, debugging, and understanding code directly from
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		app, err := app.New(ctx, conn)
+		app, err := appcore.New(ctx, conn)
 		if err != nil {
-			logging.Error("Failed to create app: %v", err)
-			return err
+			if prompt == "" && shouldLaunchStartupSetup(err) {
+				setupResult, setupErr := runStartupSetupWizard()
+				if setupErr != nil {
+					return fmt.Errorf("startup setup failed: %w", setupErr)
+				}
+
+				if setupErr = applyStartupSetupResult(setupResult); setupErr != nil {
+					return fmt.Errorf("failed to apply startup setup: %w", setupErr)
+				}
+
+				app, err = appcore.New(ctx, conn)
+				if err != nil {
+					return fmt.Errorf("failed to create app after setup: %w", err)
+				}
+			} else {
+				logging.Error("Failed to create app: %v", err)
+				return err
+			}
 		}
 		// Defer shutdown here so it runs for both interactive and non-interactive modes
 		defer app.Shutdown()
@@ -192,7 +208,7 @@ func attemptTUIRecovery(program *tea.Program) {
 	program.Quit()
 }
 
-func initMCPTools(ctx context.Context, app *app.App) {
+func initMCPTools(ctx context.Context, app *appcore.App) {
 	go func() {
 		defer logging.RecoverPanic("MCP-goroutine", nil)
 
@@ -246,7 +262,7 @@ func setupSubscriber[T any](
 	}()
 }
 
-func setupSubscriptions(app *app.App, parentCtx context.Context) (chan tea.Msg, func()) {
+func setupSubscriptions(app *appcore.App, parentCtx context.Context) (chan tea.Msg, func()) {
 	ch := make(chan tea.Msg, 100)
 
 	wg := sync.WaitGroup{}

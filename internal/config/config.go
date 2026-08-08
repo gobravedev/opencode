@@ -914,6 +914,37 @@ func UpdateAgentModel(agentName AgentName, modelID models.ModelID) error {
 	})
 }
 
+func UpdateProviderAPIKey(provider models.ModelProvider, apiKey string) error {
+	if cfg == nil {
+		return fmt.Errorf("config not loaded")
+	}
+
+	trimmedKey := strings.TrimSpace(apiKey)
+	if trimmedKey == "" {
+		return fmt.Errorf("api key for provider %s cannot be empty", provider)
+	}
+
+	if cfg.Providers == nil {
+		cfg.Providers = make(map[models.ModelProvider]Provider)
+	}
+
+	providerCfg := cfg.Providers[provider]
+	providerCfg.APIKey = trimmedKey
+	providerCfg.Disabled = false
+	cfg.Providers[provider] = providerCfg
+
+	return updateCfgFile(func(config *Config) {
+		if config.Providers == nil {
+			config.Providers = make(map[models.ModelProvider]Provider)
+		}
+
+		u := config.Providers[provider]
+		u.APIKey = trimmedKey
+		u.Disabled = false
+		config.Providers[provider] = u
+	})
+}
+
 // UpdateTheme updates the theme in the configuration and writes it to the config file.
 func UpdateTheme(themeName string) error {
 	if cfg == nil {

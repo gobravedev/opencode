@@ -706,10 +706,20 @@ func (a *agent) Summarize(ctx context.Context, sessionID string) error {
 func createAgentProvider(agentName config.AgentName) (provider.Provider, error) {
 	cfg := config.Get()
 	agentConfig, ok := cfg.Agents[agentName]
+	if !ok && agentName != config.AgentCoder {
+		agentConfig, ok = cfg.Agents[config.AgentCoder]
+	}
 	if !ok {
 		return nil, fmt.Errorf("agent %s not found", agentName)
 	}
 	model, ok := models.SupportedModels[agentConfig.Model]
+	if !ok && agentName != config.AgentCoder {
+		coderCfg, found := cfg.Agents[config.AgentCoder]
+		if found {
+			agentConfig = coderCfg
+			model, ok = models.SupportedModels[agentConfig.Model]
+		}
+	}
 	if !ok {
 		return nil, fmt.Errorf("model %s not supported", agentConfig.Model)
 	}
