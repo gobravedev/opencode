@@ -84,7 +84,18 @@ to assist developers in writing, debugging, and understanding code directly from
 		}
 		_, err := config.Load(cwd, debug)
 		if err != nil {
-			return err
+			if prompt == "" && shouldLaunchStartupSetup(err) {
+				setupResult, setupErr := runStartupSetupWizard()
+				if setupErr != nil {
+					return fmt.Errorf("startup setup failed: %w", setupErr)
+				}
+
+				if setupErr = applyStartupSetupResult(setupResult); setupErr != nil {
+					return fmt.Errorf("failed to apply startup setup: %w", setupErr)
+				}
+			} else {
+				return err
+			}
 		}
 
 		// Connect DB, this will also run migrations

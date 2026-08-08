@@ -15,8 +15,9 @@ import (
 type startupSetupStep int
 
 const (
-	startupSelectModelStep startupSetupStep = iota
+	startupSelectProviderStep startupSetupStep = iota
 	startupInputAPIKeyStep
+	startupSelectModelStep
 	startupDoneStep
 	startupCancelledStep
 )
@@ -30,8 +31,12 @@ type startupSetupResult struct {
 type startupSetupModel struct {
 	step startupSetupStep
 
-	models      []models.Model
-	selectedIdx int
+	providers           []models.ModelProvider
+	selectedProviderIdx int
+	selectedProvider    models.ModelProvider
+
+	models           []models.Model
+	selectedModelIdx int
 
 	selectedModel models.Model
 	requiresKey   bool
@@ -43,10 +48,12 @@ type startupSetupModel struct {
 
 func newStartupSetupModel() startupSetupModel {
 	return startupSetupModel{
-		step:          startupSelectModelStep,
-		models:        getStartupWizardModels(),
-		selectedIdx:   0,
-		selectedModel: models.Model{},
+		step:                startupSelectProviderStep,
+		providers:           getStartupWizardProviders(),
+		selectedProviderIdx: 0,
+		models:              []models.Model{},
+		selectedModelIdx:    0,
+		selectedModel:       models.Model{},
 	}
 }
 
@@ -58,10 +65,12 @@ func (m startupSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch m.step {
-		case startupSelectModelStep:
-			return m.updateSelectStep(msg)
+		case startupSelectProviderStep:
+			return m.updateSelectProviderStep(msg)
 		case startupInputAPIKeyStep:
 			return m.updateAPIKeyStep(msg)
+		case startupSelectModelStep:
+			return m.updateSelectModelStep(msg)
 		}
 	}
 
@@ -74,46 +83,54 @@ func (m startupSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m startupSetupModel) updateSelectStep(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m startupSetupModel) updateSelectProviderStep(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc", "q":
 		m.step = startupCancelledStep
 		return m, tea.Quit
 	case "up", "k":
-		if len(m.models) == 0 {
+		if len(m.providers) == 0 {
 			return m, nil
 		}
-		if m.selectedIdx > 0 {
-			m.selectedIdx--
+		if m.selectedProviderIdx > 0 {
+			m.selectedProviderIdx--
 		} else {
-			m.selectedIdx = len(m.models) - 1
+			m.selectedProviderIdx = len(m.providers) - 1
 		}
 		return m, nil
 	case "down", "j":
-		if len(m.models) == 0 {
+		if len(m.providers) == 0 {
 			return m, nil
 		}
-		if m.selectedIdx < len(m.models)-1 {
-			m.selectedIdx++
+		if m.selectedProviderIdx < len(m.providers)-1 {
+			m.selectedProviderIdx++
 		} else {
-			m.selectedIdx = 0
+			m.selectedProviderIdx = 0
 		}
 		return m, nil
 	case "enter":
-		if len(m.models) == 0 {
-			m.errMsg = "No supported models available for interactive setup"
+		if len(m.providers) == 0 {
+			m.errMsg = "No supported providers available for interactive setup"
 			return m, nil
 		}
 
-		selected := m.models[m.selectedIdx]
-		m.selectedModel = selected
-		m.requiresKey = providerNeedsAPIKey(selected.Provider)
-		m.apiKeyEnvName = providerAPIKeyName(selected.Provider)
+		selectedProvider := m.providers[m.selectedProviderIdx]
+		m.selectedProvider = selectedProvider
+		m.models = getStartupWizardModelsForProvider(selectedProvider)
+		m.selectedModelIdx = 0
+		m.selectedModel = models.Model{}
+		m.requiresKey = providerNeedsAPIKey(selectedProvider)
+		m.apiKeyEnvName = providerAPIKeyName(selectedProvider)
 		m.errMsg = ""
 
+		if len(m.models) == 0 {
+			m.errMsg = fmt.Sprintf("No models available for provider %s", selectedProvider)
+			return m, nil
+		}
+
 		if !m.requiresKey {
-			m.step = startupDoneStep
-			return m, tea.Quit
+			m.step = startupSelectModelStep
+			return m, nil
 		}
 
 		ti := textinput.New()
@@ -122,6 +139,7 @@ func (m startupSetupModel) updateSelectStep(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 		ti.EchoMode = textinput.EchoPassword
 		ti.EchoCharacter = '*'
 		ti.Focus()
+		m.apiKey = ""
 		m.apiKeyInput = ti
 		m.step = startupInputAPIKeyStep
 		return m, textinput.Blink
@@ -136,7 +154,7 @@ func (m startupSetupModel) updateAPIKeyStep(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 		m.step = startupCancelledStep
 		return m, tea.Quit
 	case "esc":
-		m.step = startupSelectModelStep
+		m.step = startupSelectProviderStep
 		m.errMsg = ""
 		return m, nil
 	case "enter":
@@ -148,8 +166,8 @@ func (m startupSetupModel) updateAPIKeyStep(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 
 		m.apiKey = input
 		m.errMsg = ""
-		m.step = startupDoneStep
-		return m, tea.Quit
+		m.step = startupSelectModelStep
+		return m, nil
 	}
 
 	var cmd tea.Cmd
@@ -157,7 +175,55 @@ func (m startupSetupModel) updateAPIKeyStep(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 	return m, cmd
 }
 
+func (m startupSetupModel) updateSelectModelStep(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		m.step = startupCancelledStep
+		return m, tea.Quit
+	case "esc":
+		if m.requiresKey {
+			m.step = startupInputAPIKeyStep
+			return m, nil
+		}
+		m.step = startupSelectProviderStep
+		return m, nil
+	case "up", "k":
+		if len(m.models) == 0 {
+			return m, nil
+		}
+		if m.selectedModelIdx > 0 {
+			m.selectedModelIdx--
+		} else {
+			m.selectedModelIdx = len(m.models) - 1
+		}
+		return m, nil
+	case "down", "j":
+		if len(m.models) == 0 {
+			return m, nil
+		}
+		if m.selectedModelIdx < len(m.models)-1 {
+			m.selectedModelIdx++
+		} else {
+			m.selectedModelIdx = 0
+		}
+		return m, nil
+	case "enter":
+		if len(m.models) == 0 {
+			m.errMsg = "No supported models available for selected provider"
+			return m, nil
+		}
+		m.selectedModel = m.models[m.selectedModelIdx]
+		m.step = startupDoneStep
+		return m, tea.Quit
+	}
+
+	return m, nil
+}
+
 func (m startupSetupModel) View() string {
+	if m.step == startupSelectProviderStep {
+		return m.renderProviderSelection()
+	}
 	if m.step == startupInputAPIKeyStep {
 		return m.renderAPIKeyInput()
 	}
@@ -165,10 +231,38 @@ func (m startupSetupModel) View() string {
 	return m.renderModelSelection()
 }
 
-func (m startupSetupModel) renderModelSelection() string {
+func (m startupSetupModel) renderProviderSelection() string {
 	var b strings.Builder
 	b.WriteString("OpenCode setup required: no available model/provider configured\n\n")
-	b.WriteString("Select a model (up/down, enter confirm, esc cancel):\n\n")
+	b.WriteString("Select a provider (up/down, enter confirm, esc cancel):\n\n")
+
+	if len(m.providers) == 0 {
+		b.WriteString("  No providers available\n")
+		return b.String()
+	}
+
+	for i, provider := range m.providers {
+		cursor := "  "
+		if i == m.selectedProviderIdx {
+			cursor = "> "
+		}
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, providerLabel(provider)))
+	}
+
+	if m.errMsg != "" {
+		b.WriteString("\nError: ")
+		b.WriteString(m.errMsg)
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+func (m startupSetupModel) renderModelSelection() string {
+	var b strings.Builder
+	b.WriteString("OpenCode setup required\n\n")
+	b.WriteString(fmt.Sprintf("Selected provider: %s\n", providerLabel(m.selectedProvider)))
+	b.WriteString("Select a model (up/down, enter confirm, esc back):\n\n")
 
 	if len(m.models) == 0 {
 		b.WriteString("  No models available\n")
@@ -177,10 +271,10 @@ func (m startupSetupModel) renderModelSelection() string {
 
 	for i, model := range m.models {
 		cursor := "  "
-		if i == m.selectedIdx {
+		if i == m.selectedModelIdx {
 			cursor = "> "
 		}
-		b.WriteString(fmt.Sprintf("%s%s [%s]\n", cursor, model.Name, model.Provider))
+		b.WriteString(fmt.Sprintf("%s%s\n", cursor, model.Name))
 	}
 
 	if m.errMsg != "" {
@@ -196,7 +290,7 @@ func (m startupSetupModel) renderModelSelection() string {
 func (m startupSetupModel) renderAPIKeyInput() string {
 	var b strings.Builder
 	b.WriteString("OpenCode setup required\n\n")
-	b.WriteString(fmt.Sprintf("Selected model: %s [%s]\n", m.selectedModel.Name, m.selectedModel.Provider))
+	b.WriteString(fmt.Sprintf("Selected provider: %s\n", providerLabel(m.selectedProvider)))
 	b.WriteString(fmt.Sprintf("Input %s (enter confirm, esc back):\n\n", m.apiKeyEnvName))
 	b.WriteString(m.apiKeyInput.View())
 	b.WriteString("\n")
@@ -289,6 +383,52 @@ func shouldLaunchStartupSetup(err error) bool {
 }
 
 func getStartupWizardModels() []models.Model {
+	return getStartupWizardModelsForProvider("")
+}
+
+func getStartupWizardProviders() []models.ModelProvider {
+	allowed := map[models.ModelProvider]bool{
+		models.ProviderAnthropic:  true,
+		models.ProviderOpenAI:     true,
+		models.ProviderDeepSeek:   true,
+		models.ProviderGemini:     true,
+		models.ProviderGROQ:       true,
+		models.ProviderOpenRouter: true,
+		models.ProviderXAI:        true,
+		models.ProviderCopilot:    true,
+	}
+
+	providerSet := make(map[models.ModelProvider]bool)
+	for _, model := range models.SupportedModels {
+		if allowed[model.Provider] {
+			providerSet[model.Provider] = true
+		}
+	}
+
+	providers := make([]models.ModelProvider, 0, len(providerSet))
+	for provider := range providerSet {
+		providers = append(providers, provider)
+	}
+
+	slices.SortFunc(providers, func(a, b models.ModelProvider) int {
+		rankA := models.ProviderPopularity[a]
+		rankB := models.ProviderPopularity[b]
+		if rankA == 0 {
+			rankA = 999
+		}
+		if rankB == 0 {
+			rankB = 999
+		}
+		if rankA != rankB {
+			return rankA - rankB
+		}
+		return strings.Compare(string(a), string(b))
+	})
+
+	return providers
+}
+
+func getStartupWizardModelsForProvider(provider models.ModelProvider) []models.Model {
 	allowed := map[models.ModelProvider]bool{
 		models.ProviderAnthropic:  true,
 		models.ProviderOpenAI:     true,
@@ -302,27 +442,28 @@ func getStartupWizardModels() []models.Model {
 
 	available := make([]models.Model, 0, len(models.SupportedModels))
 	for _, model := range models.SupportedModels {
-		if allowed[model.Provider] {
-			available = append(available, model)
+		if !allowed[model.Provider] {
+			continue
 		}
+		if provider != "" && model.Provider != provider {
+			continue
+		}
+		available = append(available, model)
 	}
 
 	slices.SortFunc(available, func(a, b models.Model) int {
-		rankA := models.ProviderPopularity[a.Provider]
-		rankB := models.ProviderPopularity[b.Provider]
-		if rankA == 0 {
-			rankA = 999
-		}
-		if rankB == 0 {
-			rankB = 999
-		}
-		if rankA != rankB {
-			return rankA - rankB
-		}
 		return strings.Compare(a.Name, b.Name)
 	})
 
 	return available
+}
+
+func providerLabel(provider models.ModelProvider) string {
+	name := string(provider)
+	if name == "" {
+		return "Unknown"
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 func providerNeedsAPIKey(provider models.ModelProvider) bool {
