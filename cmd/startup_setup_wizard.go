@@ -381,6 +381,7 @@ func getStartupWizardModels() []models.Model {
 	allowed := map[models.ModelProvider]bool{
 		models.ProviderAnthropic:  true,
 		models.ProviderOpenAI:     true,
+		models.ProviderDeepSeek:   true,
 		models.ProviderGemini:     true,
 		models.ProviderGROQ:       true,
 		models.ProviderOpenRouter: true,
@@ -417,6 +418,7 @@ func providerNeedsAPIKey(provider models.ModelProvider) bool {
 	switch provider {
 	case models.ProviderAnthropic,
 		models.ProviderOpenAI,
+		models.ProviderDeepSeek,
 		models.ProviderGemini,
 		models.ProviderGROQ,
 		models.ProviderOpenRouter,
@@ -434,6 +436,8 @@ func providerAPIKeyName(provider models.ModelProvider) string {
 		return "ANTHROPIC_API_KEY"
 	case models.ProviderOpenAI:
 		return "OPENAI_API_KEY"
+	case models.ProviderDeepSeek:
+		return "DEEPSEEK_API_KEY"
 	case models.ProviderGemini:
 		return "GEMINI_API_KEY"
 	case models.ProviderGROQ:

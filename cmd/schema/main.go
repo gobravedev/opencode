@@ -194,6 +194,7 @@ func generateSchema() map[string]any {
 	knownProviders := []string{
 		string(models.ProviderAnthropic),
 		string(models.ProviderOpenAI),
+		string(models.ProviderDeepSeek),
 		string(models.ProviderGemini),
 		string(models.ProviderGROQ),
 		string(models.ProviderOpenRouter),

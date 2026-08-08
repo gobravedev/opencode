@@ -261,6 +261,9 @@ func setProviderDefaults() {
 	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
 		viper.SetDefault("providers.openai.apiKey", apiKey)
 	}
+	if apiKey := os.Getenv("DEEPSEEK_API_KEY"); apiKey != "" {
+		viper.SetDefault("providers.deepseek.apiKey", apiKey)
+	}
 	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
 		viper.SetDefault("providers.gemini.apiKey", apiKey)
 	}
@@ -288,12 +291,13 @@ func setProviderDefaults() {
 	// 1. Copilot
 	// 2. Anthropic
 	// 3. OpenAI
-	// 4. Google Gemini
-	// 5. Groq
-	// 6. OpenRouter
-	// 7. AWS Bedrock
-	// 8. Azure
-	// 9. Google Cloud VertexAI
+	// 4. DeepSeek
+	// 5. Google Gemini
+	// 6. Groq
+	// 7. OpenRouter
+	// 8. AWS Bedrock
+	// 9. Azure
+	// 10. Google Cloud VertexAI
 
 	// copilot configuration
 	if key := viper.GetString("providers.copilot.apiKey"); strings.TrimSpace(key) != "" {
@@ -319,6 +323,15 @@ func setProviderDefaults() {
 		viper.SetDefault("agents.summarizer.model", models.GPT41)
 		viper.SetDefault("agents.task.model", models.GPT41Mini)
 		viper.SetDefault("agents.title.model", models.GPT41Mini)
+		return
+	}
+
+	// DeepSeek configuration
+	if key := viper.GetString("providers.deepseek.apiKey"); strings.TrimSpace(key) != "" {
+		viper.SetDefault("agents.coder.model", models.DeepSeekV4Pro)
+		viper.SetDefault("agents.summarizer.model", models.DeepSeekV4Pro)
+		viper.SetDefault("agents.task.model", models.DeepSeekV4Flash)
+		viper.SetDefault("agents.title.model", models.DeepSeekV4Flash)
 		return
 	}
 
@@ -649,6 +662,8 @@ func getProviderAPIKey(provider models.ModelProvider) string {
 		return os.Getenv("OPENAI_API_KEY")
 	case models.ProviderGemini:
 		return os.Getenv("GEMINI_API_KEY")
+	case models.ProviderDeepSeek:
+		return os.Getenv("DEEPSEEK_API_KEY")
 	case models.ProviderGROQ:
 		return os.Getenv("GROQ_API_KEY")
 	case models.ProviderAzure:
@@ -718,6 +733,24 @@ func setDefaultModelForAgent(agent AgentName) bool {
 			Model:           model,
 			MaxTokens:       maxTokens,
 			ReasoningEffort: reasoningEffort,
+		}
+		return true
+	}
+
+	if apiKey := os.Getenv("DEEPSEEK_API_KEY"); apiKey != "" {
+		model := models.DeepSeekV4Pro
+		maxTokens := int64(5000)
+
+		if agent == AgentTitle || agent == AgentTask {
+			model = models.DeepSeekV4Flash
+		}
+		if agent == AgentTitle {
+			maxTokens = 80
+		}
+
+		cfg.Agents[agent] = Agent{
+			Model:     model,
+			MaxTokens: maxTokens,
 		}
 		return true
 	}
