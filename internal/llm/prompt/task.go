@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gobravedev/opencode/internal/llm/models"
 )
@@ -13,5 +14,13 @@ Notes:
 2. When relevant, share file names and code snippets relevant to the query
 3. Any file paths you return in your final response MUST be absolute. DO NOT use relative paths.`
 
-	return fmt.Sprintf("%s\n%s\n", agentPrompt, getEnvironmentInfo())
+	sections := []string{agentPrompt, getEnvironmentInfo(), skillsInformation()}
+	nonEmpty := make([]string, 0, len(sections))
+	for _, section := range sections {
+		if strings.TrimSpace(section) != "" {
+			nonEmpty = append(nonEmpty, section)
+		}
+	}
+
+	return fmt.Sprintf("%s\n", strings.Join(nonEmpty, "\n\n"))
 }

@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,9 +14,11 @@ import (
 	"github.com/gobravedev/opencode/internal/config"
 	"github.com/gobravedev/opencode/internal/llm/agent"
 	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/gobravedev/opencode/internal/message"
 	"github.com/gobravedev/opencode/internal/permission"
 	"github.com/gobravedev/opencode/internal/pubsub"
 	"github.com/gobravedev/opencode/internal/session"
+	"github.com/gobravedev/opencode/internal/skills"
 	"github.com/gobravedev/opencode/internal/tui/components/chat"
 	"github.com/gobravedev/opencode/internal/tui/components/core"
 	"github.com/gobravedev/opencode/internal/tui/components/dialog"
@@ -36,6 +40,7 @@ type keyMap struct {
 }
 
 type startCompactSessionMsg struct{}
+type runSkillsListMsg struct{}
 
 const (
 	quitKey = "q"
@@ -413,6 +418,43 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, msg.Command.Handler(msg.Command)
 		}
 		return a, util.ReportInfo("Command selected: " + msg.Command.Title)
+
+	case runSkillsListMsg:
+		paths, err := skills.DefaultPaths(config.WorkingDirectory())
+		if err != nil {
+			return a, util.ReportError(err)
+		}
+
+		loadedSkills, states := skills.DiscoverWithStates(paths)
+		output := renderSkillsStatus(paths, loadedSkills, states)
+
+		selectedSession := a.selectedSession
+		var createSessionCmd tea.Cmd
+		if selectedSession.ID == "" {
+			selectedSession, err = a.app.Sessions.Create(context.Background(), "Skills Status")
+			if err != nil {
+				return a, util.ReportError(err)
+			}
+			a.selectedSession = selectedSession
+			createSessionCmd = util.CmdHandler(chat.SessionSelectedMsg(selectedSession))
+		}
+
+		_, err = a.app.Messages.Create(context.Background(), selectedSession.ID, message.CreateMessageParams{
+			Role: message.Assistant,
+			Parts: []message.ContentPart{
+				message.TextContent{Text: output},
+				message.Finish{Reason: message.FinishReasonEndTurn, Time: time.Now().Unix()},
+			},
+		})
+		if err != nil {
+			return a, util.ReportError(err)
+		}
+
+		statusCmd := util.ReportInfo(fmt.Sprintf("skills:list loaded=%d states=%d", len(loadedSkills), len(states)))
+		if createSessionCmd != nil {
+			return a, tea.Batch(createSessionCmd, statusCmd)
+		}
+		return a, statusCmd
 
 	case dialog.ShowMultiArgumentsDialogMsg:
 		// Show multi-arguments dialog
@@ -951,6 +993,15 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 			}
 		},
 	})
+
+	model.RegisterCommand(dialog.Command{
+		ID:          "skills:list",
+		Title:       "skills:list",
+		Description: "Show discovered skills and load states",
+		Handler: func(cmd dialog.Command) tea.Cmd {
+			return util.CmdHandler(runSkillsListMsg{})
+		},
+	})
 	// Load custom commands
 	customCommands, err := dialog.LoadCustomCommands()
 	if err != nil {
@@ -962,4 +1013,66 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 	}
 
 	return model
+}
+
+func renderSkillsStatus(paths []string, loaded []*skills.Skill, states []*skills.SkillState) string {
+	var sb strings.Builder
+
+	sb.WriteString("# Skills Status\n\n")
+	sb.WriteString("## Search Paths\n")
+	for _, path := range paths {
+		sb.WriteString("- ")
+		sb.WriteString(path)
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\n## Loaded Skills\n")
+	sb.WriteString("| Name | User Invocable | Model Invocation | File |\n")
+	sb.WriteString("| --- | --- | --- | --- |\n")
+	if len(loaded) == 0 {
+		sb.WriteString("| (none) | - | - | - |\n")
+	} else {
+		for _, sk := range loaded {
+			invocation := "enabled"
+			if sk.DisableModelInvocation {
+				invocation = "disabled"
+			}
+			sb.WriteString(fmt.Sprintf("| %s | %t | %s | %s |\n", sk.Name, sk.UserInvocable, invocation, sk.SkillFilePath))
+		}
+	}
+
+	sb.WriteString("\n## Discovery States\n")
+	sb.WriteString("| State | Name | Path | Error |\n")
+	sb.WriteString("| --- | --- | --- | --- |\n")
+	if len(states) == 0 {
+		sb.WriteString("| (none) | - | - | - |\n")
+	} else {
+		sortedStates := make([]*skills.SkillState, len(states))
+		copy(sortedStates, states)
+		sort.SliceStable(sortedStates, func(i, j int) bool {
+			if sortedStates[i].State != sortedStates[j].State {
+				return sortedStates[i].State < sortedStates[j].State
+			}
+			return sortedStates[i].Path < sortedStates[j].Path
+		})
+
+		for _, st := range sortedStates {
+			stateText := "normal"
+			if st.State == skills.StateError {
+				stateText = "error"
+			}
+
+			errText := ""
+			if st.Err != nil {
+				errText = strings.ReplaceAll(st.Err.Error(), "\n", " ")
+			}
+			name := st.Name
+			if name == "" {
+				name = "-"
+			}
+			sb.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n", stateText, name, st.Path, errText))
+		}
+	}
+
+	return sb.String()
 }

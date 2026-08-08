@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/gobravedev/opencode/internal/config"
 	"github.com/gobravedev/opencode/internal/llm/models"
 	"github.com/gobravedev/opencode/internal/llm/tools"
+	"github.com/gobravedev/opencode/internal/skills"
 )
 
 func CoderPrompt(provider models.ModelProvider) string {
@@ -20,8 +22,18 @@ func CoderPrompt(provider models.ModelProvider) string {
 		basePrompt = baseOpenAICoderPrompt
 	}
 	envInfo := getEnvironmentInfo()
+	skillsInfo := skillsInformation()
+	lspInfo := lspInformation()
 
-	return fmt.Sprintf("%s\n\n%s\n%s", basePrompt, envInfo, lspInformation())
+	sections := []string{basePrompt, envInfo, lspInfo, skillsInfo}
+	nonEmpty := make([]string, 0, len(sections))
+	for _, section := range sections {
+		if strings.TrimSpace(section) != "" {
+			nonEmpty = append(nonEmpty, section)
+		}
+	}
+
+	return strings.Join(nonEmpty, "\n\n")
 }
 
 const baseOpenAICoderPrompt = `
@@ -212,6 +224,15 @@ Tools that support it will also include useful diagnostics such as linting and t
 - Take necessary actions to fix the issues.
 - You should ignore diagnostics of files that you did not change or are not related or caused by your changes unless the user explicitly asks you to fix them.
 `
+}
+
+func skillsInformation() string {
+	paths, err := skills.DefaultPaths(config.WorkingDirectory())
+	if err != nil {
+		return ""
+	}
+
+	return skills.BuildPromptSection(paths)
 }
 
 func boolToYesNo(b bool) string {
