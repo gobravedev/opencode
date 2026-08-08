@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -878,6 +879,20 @@ func updateCfgFile(updateCfg func(config *Config)) error {
 	var userCfg *Config
 	if err := json.Unmarshal(configData, &userCfg); err != nil {
 		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+	if userCfg == nil {
+		userCfg = &Config{}
+	}
+
+	// Keep existing in-memory persisted maps to avoid overwriting entries
+	// when multiple updates run in sequence during startup setup.
+	if userCfg.Providers == nil && cfg.Providers != nil {
+		userCfg.Providers = make(map[models.ModelProvider]Provider)
+		maps.Copy(userCfg.Providers, cfg.Providers)
+	}
+	if userCfg.Agents == nil && cfg.Agents != nil {
+		userCfg.Agents = make(map[AgentName]Agent)
+		maps.Copy(userCfg.Agents, cfg.Agents)
 	}
 
 	updateCfg(userCfg)
