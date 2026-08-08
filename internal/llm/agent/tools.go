@@ -31,6 +31,7 @@ func CoderAgentTools(
 			tools.NewGlobTool(),
 			tools.NewGrepTool(),
 			tools.NewLsTool(),
+			tools.NewSkillLoadTool(),
 			tools.NewSourcegraphTool(),
 			tools.NewViewTool(lspClients),
 			tools.NewPatchTool(lspClients, permissions, history),
@@ -45,6 +46,7 @@ func TaskAgentTools(lspClients map[string]*lsp.Client) []tools.BaseTool {
 		tools.NewGlobTool(),
 		tools.NewGrepTool(),
 		tools.NewLsTool(),
+		tools.NewSkillLoadTool(),
 		tools.NewSourcegraphTool(),
 		tools.NewViewTool(lspClients),
 	}
