@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/opencode-ai/opencode/internal/llm/models"
+	"github.com/gobravedev/opencode/internal/llm/models"
 )
 
 type MessageRole string

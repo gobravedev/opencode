@@ -9,17 +9,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/db"
-	"github.com/opencode-ai/opencode/internal/format"
-	"github.com/opencode-ai/opencode/internal/history"
-	"github.com/opencode-ai/opencode/internal/llm/agent"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/lsp"
-	"github.com/opencode-ai/opencode/internal/message"
-	"github.com/opencode-ai/opencode/internal/permission"
-	"github.com/opencode-ai/opencode/internal/session"
-	"github.com/opencode-ai/opencode/internal/tui/theme"
+	"github.com/gobravedev/opencode/internal/config"
+	"github.com/gobravedev/opencode/internal/db"
+	"github.com/gobravedev/opencode/internal/format"
+	"github.com/gobravedev/opencode/internal/history"
+	"github.com/gobravedev/opencode/internal/llm/agent"
+	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/gobravedev/opencode/internal/lsp"
+	"github.com/gobravedev/opencode/internal/message"
+	"github.com/gobravedev/opencode/internal/permission"
+	"github.com/gobravedev/opencode/internal/session"
+	"github.com/gobravedev/opencode/internal/tui/theme"
 )
 
 type App struct {

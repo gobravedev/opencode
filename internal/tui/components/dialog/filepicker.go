@@ -14,14 +14,14 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/opencode-ai/opencode/internal/app"
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/message"
-	"github.com/opencode-ai/opencode/internal/tui/image"
-	"github.com/opencode-ai/opencode/internal/tui/styles"
-	"github.com/opencode-ai/opencode/internal/tui/theme"
-	"github.com/opencode-ai/opencode/internal/tui/util"
+	"github.com/gobravedev/opencode/internal/app"
+	"github.com/gobravedev/opencode/internal/config"
+	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/gobravedev/opencode/internal/message"
+	"github.com/gobravedev/opencode/internal/tui/image"
+	"github.com/gobravedev/opencode/internal/tui/styles"
+	"github.com/gobravedev/opencode/internal/tui/theme"
+	"github.com/gobravedev/opencode/internal/tui/util"
 )
 
 const (

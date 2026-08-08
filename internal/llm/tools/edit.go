@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/diff"
-	"github.com/opencode-ai/opencode/internal/history"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/lsp"
-	"github.com/opencode-ai/opencode/internal/permission"
+	"github.com/gobravedev/opencode/internal/config"
+	"github.com/gobravedev/opencode/internal/diff"
+	"github.com/gobravedev/opencode/internal/history"
+	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/gobravedev/opencode/internal/lsp"
+	"github.com/gobravedev/opencode/internal/permission"
 )
 
 type EditParams struct {
