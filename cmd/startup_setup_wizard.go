@@ -1,11 +1,9 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -213,10 +211,6 @@ func (m startupSetupModel) renderAPIKeyInput() string {
 }
 
 func runStartupSetupWizard() (startupSetupResult, error) {
-	if !hasTTY() {
-		return runStartupSetupTextMode()
-	}
-
 	m := newStartupSetupModel()
 	program := tea.NewProgram(
 		m,
@@ -227,9 +221,6 @@ func runStartupSetupWizard() (startupSetupResult, error) {
 
 	finalModel, err := program.Run()
 	if err != nil {
-		if shouldFallbackToTextMode(err) {
-			return runStartupSetupTextMode()
-		}
 		return startupSetupResult{}, err
 	}
 
@@ -250,86 +241,6 @@ func runStartupSetupWizard() (startupSetupResult, error) {
 		Provider: resultModel.selectedModel.Provider,
 		APIKey:   resultModel.apiKey,
 	}, nil
-}
-
-func shouldFallbackToTextMode(err error) bool {
-	errText := strings.ToLower(err.Error())
-	return strings.Contains(errText, "could not open a new tty") || strings.Contains(errText, "/dev/tty")
-}
-
-func hasTTY() bool {
-	stdinInfo, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	stdoutInfo, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-
-	stdinTTY := (stdinInfo.Mode() & os.ModeCharDevice) != 0
-	stdoutTTY := (stdoutInfo.Mode() & os.ModeCharDevice) != 0
-	return stdinTTY && stdoutTTY
-}
-
-func runStartupSetupTextMode() (startupSetupResult, error) {
-	availableModels := getStartupWizardModels()
-	if len(availableModels) == 0 {
-		return startupSetupResult{}, fmt.Errorf("no supported models available for startup setup")
-	}
-
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Fprintln(os.Stdout, "OpenCode setup required: no available model/provider configured")
-	fmt.Fprintln(os.Stdout, "Select a model by number:")
-	for i, model := range availableModels {
-		fmt.Fprintf(os.Stdout, "  %d) %s [%s]\n", i+1, model.Name, model.Provider)
-	}
-
-	selectedModel, err := promptModelSelection(reader, availableModels)
-	if err != nil {
-		return startupSetupResult{}, err
-	}
-
-	result := startupSetupResult{
-		ModelID:  selectedModel.ID,
-		Provider: selectedModel.Provider,
-	}
-
-	if providerNeedsAPIKey(selectedModel.Provider) {
-		apiKeyEnvName := providerAPIKeyName(selectedModel.Provider)
-		fmt.Fprintf(os.Stdout, "Input %s: ", apiKeyEnvName)
-		apiKey, readErr := reader.ReadString('\n')
-		if readErr != nil {
-			return startupSetupResult{}, fmt.Errorf("failed to read %s: %w", apiKeyEnvName, readErr)
-		}
-		result.APIKey = strings.TrimSpace(apiKey)
-		if result.APIKey == "" {
-			return startupSetupResult{}, fmt.Errorf("%s cannot be empty", apiKeyEnvName)
-		}
-	}
-
-	return result, nil
-}
-
-func promptModelSelection(reader *bufio.Reader, availableModels []models.Model) (models.Model, error) {
-	for attempt := 0; attempt < 3; attempt++ {
-		fmt.Fprint(os.Stdout, "Model number: ")
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			return models.Model{}, fmt.Errorf("failed to read model selection: %w", err)
-		}
-
-		input = strings.TrimSpace(input)
-		idx, err := strconv.Atoi(input)
-		if err != nil || idx < 1 || idx > len(availableModels) {
-			fmt.Fprintln(os.Stdout, "Invalid selection, please input a valid number.")
-			continue
-		}
-
-		return availableModels[idx-1], nil
-	}
-
-	return models.Model{}, fmt.Errorf("too many invalid model selections")
 }
 
 func applyStartupSetupResult(result startupSetupResult) error {
